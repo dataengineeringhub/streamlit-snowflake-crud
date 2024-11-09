@@ -7,10 +7,10 @@ import views.app_view as view
 import models.data_model as model
 
 DEFAULT_VALUES = {
-    "selected_producer": "",
+    "selected_company": "",
     "selected_program": "",
     "selected_products": [],  # Initialize selected_products as an empty list
-    "ninput_ulr": 0.0,
+    "ninput_commission": 0.0,
     "is_active": True,
     "reset_flag": False,
 }
@@ -58,21 +58,21 @@ def get_selection_step(step_label, options, session_key):
     return selected
 
 
-def get_producer_selection():
-    producers = model.get_distinct_producer_names()
-    filtered_producers = [producer for producer in producers if producer]
+def get_company_selection():
+    companies = model.get_distinct_company_names()
+    filtered_companies = [company for company in companies if company]
     # Add a blank option at the beginning
-    filtered_producers.insert(0, "")
+    filtered_companies.insert(0, "")
     return st.selectbox(
-        "Step 1 of 4: Select Producer",
-        options=filtered_producers,
-        key="selected_producer",
+        "Step 1 of 4: Select company",
+        options=filtered_companies,
+        key="selected_company",
     )
 
 
 def get_program_selection():
-    if st.session_state.selected_producer:
-        programs = model.get_distinct_program_codes(st.session_state.selected_producer)
+    if st.session_state.selected_company:
+        programs = model.get_distinct_program_codes(st.session_state.selected_company)
         filtered_programs = [program for program in programs if program]
         # Add a blank option at the beginning
         filtered_programs.insert(0, "")
@@ -96,11 +96,13 @@ def get_product_selection():
     return None
 
 
-def get_ulr_input():
+def get_commission_input():
     # Ensure we only proceed if multiple products are selected
     if st.session_state.selected_products:
         return view.display_number_input(
-            "Step 4 of 4: Enter ULTIMATE_LOSS_RATIO", key="ninput_ulr", min_value=0.0
+            "Step 4 of 4: Enter COMMISSION_AMOUNT",
+            key="ninput_commission",
+            min_value=0.0,
         )
     return None
 
@@ -111,13 +113,13 @@ def handle_form_submission():
 
     if view.display_form_submit_button("Save Entry", form_key="ulr_form"):
         if not (
-            st.session_state.selected_producer
+            st.session_state.selected_company
             and st.session_state.selected_program
             and st.session_state.selected_products
-            and st.session_state.ninput_ulr > 0
+            and st.session_state.ninput_commission > 0
         ):
             view.display_error_message(
-                "Please fill all fields and provide a valid ULR value."
+                "Please fill all fields and provide a valid commission amount."
             )
         else:
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -127,7 +129,7 @@ def handle_form_submission():
             # Loop through each product and check for duplicates
             for product in st.session_state.selected_products:
                 if model.check_existing_entry(
-                    st.session_state.selected_producer,
+                    st.session_state.selected_company,
                     st.session_state.selected_program,
                     product,
                 ):
@@ -135,10 +137,10 @@ def handle_form_submission():
                 else:
                     new_entries.append(
                         {
-                            "PRODUCER_NAME": st.session_state.selected_producer,
+                            "COMPANY_NAME": st.session_state.selected_company,
                             "PROGRAM_CODE": st.session_state.selected_program,
                             "PRODUCT_CODE": product,
-                            "ULTIMATE_LOSS_RATIO": st.session_state.ninput_ulr,
+                            "COMMISSION_AMOUNT": st.session_state.ninput_commission,
                             "IS_ACTIVE": st.session_state.is_active,
                             "UPDATED_LAST": current_time,
                             "USERNAME": st.experimental_user.get(
@@ -152,15 +154,15 @@ def handle_form_submission():
                 duplicate_list = ", ".join(duplicate_entries)
                 view.display_error_message(
                     f"Duplicate entry detected: The product code(s) {duplicate_list} already exist \
-                        for the selected producer and program. Please modify your input or \
+                        for the selected company and program. Please modify your input or \
                             check existing records."
                 )
                 reset_form()  # Reset after detecting only duplicates
 
             # Convert to DataFrame and save if there are new entries
             if new_entries:
-                new_ulr_data = pd.DataFrame(new_entries)
-                success, message = model.save_ulr_data(new_ulr_data)
+                new_commision_data = pd.DataFrame(new_entries)
+                success, message = model.save_commission_data(new_commision_data)
                 if success:
                     view.display_success_message(message)
                     reset_form()  # Reset after successful save
@@ -169,81 +171,27 @@ def handle_form_submission():
                     view.display_error_message(message)
 
 
-# def handle_form_submission():
-#     if st.session_state.get("reset_flag"):
-#         reset_form()
-
-#     if view.display_form_submit_button("Save Entry", form_key="ulr_form"):
-#         if not (
-#             st.session_state.selected_producer
-#             and st.session_state.selected_program
-#             and st.session_state.selected_products
-#             and st.session_state.ninput_ulr > 0
-#         ):
-#             view.display_error_message(
-#                 "Please fill all fields and provide a valid ULR value."
-#             )
-#         else:
-#             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-#             new_entries = []
-
-#             # Loop through each product and check for duplicates
-#             for product in st.session_state.selected_products:
-#                 if not model.check_existing_entry(
-#                     st.session_state.selected_producer,
-#                     st.session_state.selected_program,
-#                     product,
-#                 ):
-#                     new_entries.append(
-#                         {
-#                             "PRODUCER_NAME": st.session_state.selected_producer,
-#                             "PROGRAM_CODE": st.session_state.selected_program,
-#                             "PRODUCT_CODE": product,
-#                             "ULTIMATE_LOSS_RATIO": st.session_state.ninput_ulr,
-#                             "IS_ACTIVE": st.session_state.is_active,
-#                             "UPDATED_LAST": current_time,
-#                             "USERNAME": st.experimental_user.get(
-#                                 "user_name", "TEST_USER"
-#                             ),
-#                         }
-#                     )
-
-#             # Convert to DataFrame and save if there are new entries
-#             if new_entries:
-#                 new_ulr_data = pd.DataFrame(new_entries)
-#                 success, message = model.save_ulr_data(new_ulr_data)
-#                 if success:
-#                     view.display_success_message(message)
-#                     reset_form()  # Reset after successful save
-#                     conditional_rerun()
-#                 else:
-#                     view.display_error_message(message)
-#             else:
-#                 view.display_error_message("Duplicate detected, record already exists.")
-#                 reset_form()  # Reset after detecting only duplicates
-
-
-def display_ulr_table(max_visible_rows=25):
+def display_commission_table(max_visible_rows=25):
     # Fetch the current ULR data from Snowflake
-    ulr_data = model.get_dataset("DE_STREAMLIT_DEV.FINANCE.ULTIMATE_LOSS_RATIO")
+    commission_data = model.get_dataset("PRODUCTS.CUSTOMERS.COMMISSIONS")
 
     # Sidebar Filtering Controls
     st.sidebar.header("Filter Options")
-    producer_filter = st.sidebar.text_input("Filter by Producer Name")
+    company_filter = st.sidebar.text_input("Filter by Company Name")
     program_filter = st.sidebar.text_input("Filter by Program Code")
     product_filter = st.sidebar.text_input("Filter by Product Code")
-    ulr_min_filter = st.sidebar.number_input(
-        "Min Ultimate Loss Ratio",
-        value=ulr_data["ULTIMATE_LOSS_RATIO"].min(),
+    company_min_filter = st.sidebar.number_input(
+        "Min Commission",
+        value=commission_data["COMMISSION_AMOUNT"].min(),
         step=0.01,
     )
-    ulr_max_filter = st.sidebar.number_input(
-        "Max Ultimate Loss Ratio",
-        value=ulr_data["ULTIMATE_LOSS_RATIO"].max(),
+    commission_max_filter = st.sidebar.number_input(
+        "Max Commission",
+        value=commission_data["COMMISSION_AMOUNT"].max(),
         step=0.01,
     )
     username_filter = st.sidebar.selectbox(
-        "Filter by Username", options=[""] + list(ulr_data["USERNAME"].unique())
+        "Filter by Username", options=[""] + list(commission_data["USERNAME"].unique())
     )
 
     # Date Range Slider for UPDATED_LAST column with no default value
@@ -251,11 +199,11 @@ def display_ulr_table(max_visible_rows=25):
     date_range = st.sidebar.date_input("Filter by Updated Date", [])
 
     # Apply filters to the data
-    filtered_data = ulr_data
-    if producer_filter:
+    filtered_data = commission_data
+    if company_filter:
         filtered_data = filtered_data[
-            filtered_data["PRODUCER_NAME"].str.contains(
-                producer_filter, case=False, na=False
+            filtered_data["COMPANY_NAME"].str.contains(
+                company_filter, case=False, na=False
             )
         ]
     if program_filter:
@@ -270,16 +218,17 @@ def display_ulr_table(max_visible_rows=25):
                 product_filter, case=False, na=False
             )
         ]
-    if ulr_min_filter is not None:
+    if company_min_filter is not None:
         filtered_data = filtered_data[
-            filtered_data["ULTIMATE_LOSS_RATIO"] >= ulr_min_filter
+            filtered_data["COMMISSION_AMOUNT"] >= company_min_filter
         ]
-    if ulr_max_filter is not None:
+    if commission_max_filter is not None:
         filtered_data = filtered_data[
-            filtered_data["ULTIMATE_LOSS_RATIO"] <= ulr_max_filter
+            filtered_data["COMMISSION_AMOUNT"] <= commission_max_filter
         ]
     if username_filter:
         filtered_data = filtered_data[filtered_data["USERNAME"] == username_filter]
+
     if len(date_range) == 2:
         start_date, end_date = date_range
         filtered_data = filtered_data[
@@ -287,11 +236,11 @@ def display_ulr_table(max_visible_rows=25):
             & (filtered_data["UPDATED_LAST"] <= pd.to_datetime(end_date))
         ]
 
-    # Sorting Controls for Producer Name, Program Code, Product Code
+    # Sorting Controls for Compan Name, Program Code, Product Code
     st.sidebar.header("Sorting Options")
     sort_column = st.sidebar.selectbox(
         "Sort by Column",
-        options=[""] + ["PRODUCER_NAME", "PROGRAM_CODE", "PRODUCT_CODE", "IS_ACTIVE"],
+        options=[""] + ["COMPANY_NAME", "PROGRAM_CODE", "PRODUCT_CODE", "IS_ACTIVE"],
         index=0,  # Default to an empty option, meaning no sorting applied initially
     )
 
@@ -303,16 +252,12 @@ def display_ulr_table(max_visible_rows=25):
         filtered_data = filtered_data.sort_values(by=sort_column, ascending=True)
 
     # # Display the full filtered data without pagination
-    editable_columns = ["ULTIMATE_LOSS_RATIO", "IS_ACTIVE"]
+    editable_columns = ["COMMISSION_AMOUNT", "IS_ACTIVE"]
 
     # Before displaying in data_editor
     filtered_data = filtered_data.reset_index(drop=True)
 
-    # Set the height based on the max_visible_rows
-    # row_height = 35  # Average row height in pixels
-    # editor_height = min(len(filtered_data), max_visible_rows) * row_height
-
-    edited_ulr_data = st.data_editor(
+    edited_commission_data = st.data_editor(
         filtered_data,
         use_container_width=True,
         height=600,
@@ -322,11 +267,11 @@ def display_ulr_table(max_visible_rows=25):
 
     # Check if rows were deleted by comparing the indexes
     original_index_set = set(filtered_data.index)
-    edited_index_set = set(edited_ulr_data.index)
+    edited_index_set = set(edited_commission_data.index)
     deleted_indexes = original_index_set - edited_index_set
 
     # Check if there are any changes to the editable columns or rows have been deleted
-    if not edited_ulr_data.equals(filtered_data) or deleted_indexes:
+    if not edited_commission_data.equals(filtered_data) or deleted_indexes:
         st.write("Changes detected. Click 'Apply Changes' to save.")
 
         if st.button("Apply Changes"):
@@ -334,41 +279,41 @@ def display_ulr_table(max_visible_rows=25):
                 # Handle Deletions
                 for delete_index in deleted_indexes:
                     row_to_delete = filtered_data.loc[delete_index]
-                    # Use the primary keys (PRODUCER_NAME, PROGRAM_CODE, PRODUCT_CODE)
+                    # Use the primary keys (COMPANY_NAME, PROGRAM_CODE, PRODUCT_CODE)
                     # to identify the record to delete
-                    success, message = model.delete_ulr_data(
-                        producer_name=row_to_delete["PRODUCER_NAME"],
+                    success, message = model.delete_commission_data(
+                        company_name=row_to_delete["COMPANY_NAME"],
                         program_code=row_to_delete["PROGRAM_CODE"],
                         product_code=row_to_delete["PRODUCT_CODE"],
                     )
                     if success:
                         st.success(
-                            f"Row for producer '{row_to_delete['PRODUCER_NAME']}' \
+                            f"Row for company '{row_to_delete['COMPANY_NAME']}' \
                                 deleted successfully."
                         )
                     else:
                         st.error(f"Failed to delete row: {message}")
 
                 # Handle Updates
-                changed_rows = edited_ulr_data[
-                    edited_ulr_data.ne(filtered_data).any(axis=1)
+                changed_rows = edited_commission_data[
+                    edited_commission_data.ne(filtered_data).any(axis=1)
                 ]
                 for index, row in changed_rows.iterrows():
                     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    # Use the primary keys (PRODUCER_NAME, PROGRAM_CODE, PRODUCT_CODE)
+                    # Use the primary keys (COMPANY_NAME, PROGRAM_CODE, PRODUCT_CODE)
                     # to identify the record to update
                     success, message = model.update_ulr_data(
-                        producer_name=row["PRODUCER_NAME"],
+                        company_name=row["COMPANY_NAME"],
                         program_code=row["PROGRAM_CODE"],
                         product_code=row["PRODUCT_CODE"],
-                        ultimate_loss_ratio=row["ULTIMATE_LOSS_RATIO"],
+                        commission_amount=row["COMMISSION_AMOUNT"],
                         is_active=row["IS_ACTIVE"],
                         updated_last=current_time,
                         username=st.experimental_user.get("user_name", "Unknown"),
                     )
                     if success:
                         st.success(
-                            f"Row for producer '{row['PRODUCER_NAME']}' updated successfully."
+                            f"Row for company '{row['COMPANY_NAME']}' updated successfully."
                         )
                     else:
                         st.error(f"Failed to update row: {message}")

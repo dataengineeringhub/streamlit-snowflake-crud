@@ -13,7 +13,7 @@ def getSession():
     except:
         parser = configparser.ConfigParser()
         parser.read(os.path.join(os.path.expanduser("~"), ".snowsql/config"))
-        section = "connections.dev_conn"
+        section = "connections.data_eng"
         pars = {
             "account": parser.get(section, "accountname"),
             "user": parser.get(section, "username"),
@@ -22,31 +22,31 @@ def getSession():
         return Session.builder.configs(pars).create()
 
 
-@st.cache_data(show_spinner="Fetching producer names...")
-def get_distinct_producer_names():
+@st.cache_data(show_spinner="Fetching company names...")
+def get_distinct_company_names():
     session = getSession()
     query = session.sql(
         """
-        SELECT DISTINCT PRODUCER_NAME
-        FROM SPECIALTY_DEV.ODS.ODS_IMS_PREMIUM_CLAIM_MONTH_END_FINANCE
-        ORDER BY PRODUCER_NAME ASC
+        SELECT DISTINCT COMPANY_NAME
+        FROM PRODUCTS.CUSTOMERS.MAPPING
+        ORDER BY COMPANY_NAME ASC
         """
     )
     df = query.to_pandas()
-    return df["PRODUCER_NAME"].tolist()
+    return df["COMPANY_NAME"].tolist()
 
 
 @st.cache_data(show_spinner="Fetching program codes...")
-def get_distinct_program_codes(producer):
+def get_distinct_program_codes(company):
     session = getSession()
     query = session.sql(
         """
         SELECT DISTINCT PROGRAM_CODE
-        FROM SPECIALTY_DEV.ODS.ODS_IMS_PREMIUM_CLAIM_MONTH_END_FINANCE
-        WHERE PRODUCER_NAME = ?
+        FROM PRODUCTS.CUSTOMERS.MAPPING
+        WHERE COMPANY_NAME = ?
         ORDER BY PROGRAM_CODE ASC
         """,
-        (producer,),  # Parameterized value as a tuple
+        (company,),  # Parameterized value as a tuple
     )
     df = query.to_pandas()
     return df["PROGRAM_CODE"].tolist()
@@ -58,7 +58,7 @@ def get_distinct_product_codes(program_code):
     query = session.sql(
         """
         SELECT DISTINCT PRODUCT_CODE
-        FROM SPECIALTY_DEV.ODS.ODS_IMS_PREMIUM_CLAIM_MONTH_END_FINANCE
+        FROM PRODUCTS.CUSTOMERS.MAPPING
         WHERE PROGRAM_CODE = ?
         ORDER BY PRODUCT_CODE ASC
         """,
@@ -80,14 +80,14 @@ def get_dataset(table_name):
         return pd.DataFrame()  # Return an empty DataFrame as a fallback
 
 
-def save_ulr_data(new_ulr_data):
+def save_commission_data(new_commission_data):
     session = getSession()
     try:
         session.write_pandas(
-            new_ulr_data,
-            "ULTIMATE_LOSS_RATIO",
-            database="DE_STREAMLIT_DEV",
-            schema="FINANCE",
+            new_commission_data,
+            "COMMISSIONS",
+            database="PRODUCTS",
+            schema="CUSTOMERS",
             overwrite=False,
         )
         return True, "Data successfully saved."
@@ -95,16 +95,16 @@ def save_ulr_data(new_ulr_data):
         return False, f"Failed to save data: {e}"
 
 
-def check_existing_entry(producer_name, program_code, product_code):
+def check_existing_entry(company_name, program_code, product_code):
     try:
         session = getSession()
         query = session.sql(
             """
             SELECT COUNT(*)
-            FROM DE_STREAMLIT_DEV.FINANCE.ULTIMATE_LOSS_RATIO
-            WHERE PRODUCER_NAME = ? AND PROGRAM_CODE = ? AND PRODUCT_CODE = ?
+            FROM PRODUCTS.CUSTOMERS.COMMISSIONS
+            WHERE COMPANY_NAME = ? AND PROGRAM_CODE = ? AND PRODUCT_CODE = ?
             """,
-            (producer_name, program_code, product_code),
+            (company_name, program_code, product_code),
         )
         result = query.collect()
         record_count = result[0][0] if result else 0
@@ -115,10 +115,10 @@ def check_existing_entry(producer_name, program_code, product_code):
 
 
 def update_ulr_data(
-    producer_name,
+    company_name,
     program_code,
     product_code,
-    ultimate_loss_ratio,
+    commission_amount,
     is_active,
     updated_last,
     username,
@@ -127,48 +127,47 @@ def update_ulr_data(
     try:
         # Use parameterized query with placeholders for all variables
         update_query = """
-        UPDATE DE_STREAMLIT_DEV.FINANCE.ULTIMATE_LOSS_RATIO
-        SET ULTIMATE_LOSS_RATIO = ?,
+        UPDATE PRODUCTS.CUSTOMERS.COMMISSIONS
+        SET COMMISSION_AMOUNT = ?,
             IS_ACTIVE = ?,
             UPDATED_LAST = ?,
             USERNAME = ?
-        WHERE PRODUCER_NAME = ?
+        WHERE COMPANY_NAME = ?
         AND PROGRAM_CODE = ?
         AND PRODUCT_CODE = ?
         """
-
         # Execute the query with parameters passed as a tuple
         session.sql(
             update_query,
             (
-                ultimate_loss_ratio,
+                commission_amount,
                 is_active,
                 updated_last,
                 username,
-                producer_name,
+                company_name,
                 program_code,
                 product_code,
             ),
         ).collect()
 
-        return True, "ULR data updated successfully."
+        return True, "Commission data updated successfully."
     except Exception as e:
         return False, f"Failed to update data: {e}"
 
 
-def delete_ulr_data(producer_name, program_code, product_code):
+def delete_commission_data(company_name, program_code, product_code):
     session = getSession()
     try:
         # Parameterized query with placeholders for all variables
         delete_query = """
-        DELETE FROM DE_STREAMLIT_DEV.FINANCE.ULTIMATE_LOSS_RATIO
-        WHERE PRODUCER_NAME = ?
+        DELETE FROM PRODUCTS.CUSTOMERS.COMMISSIONS
+        WHERE COMPANY_NAME = ?
         AND PROGRAM_CODE = ?
         AND PRODUCT_CODE = ?
         """
 
         # Execute the query with parameters passed as a tuple
-        session.sql(delete_query, (producer_name, program_code, product_code)).collect()
+        session.sql(delete_query, (company_name, program_code, product_code)).collect()
 
         return True, "Row deleted successfully."
     except Exception as e:
