@@ -30,12 +30,6 @@ def conditional_rerun():
     st.rerun()
 
 
-# Initialize the page layout and title
-def initialize_page():
-    view.set_page_config()
-    view.display_title("Ultimate Loss Ratio Form Entry")
-
-
 # Set reset flag in session state to indicate form clearing
 def clear_form():
     st.session_state.reset_flag = True
@@ -48,21 +42,6 @@ def reset_form():
             del st.session_state[key]
     st.session_state.reset_flag = False
     conditional_rerun()
-
-
-# Display a select box for each step in the process, customizing label and options
-def get_selection_step(step_label, options, session_key):
-    options = (
-        [""] + options
-        if options
-        else [f"No {step_label.split()[3].lower()}s available"]
-    )
-    selected = view.display_selectbox(
-        f"Step {step_label}",
-        options=options,
-        key=session_key,
-    )
-    return selected
 
 
 # Display the dropdown for selecting a company from available options
