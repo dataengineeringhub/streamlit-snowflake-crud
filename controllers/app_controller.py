@@ -6,6 +6,8 @@ from datetime import datetime
 import views.app_view as view
 import models.data_model as model
 
+# Default values for session state, including company, program, product selections,
+# commission input, and reset flag for clearing form data.
 DEFAULT_VALUES = {
     "selected_company": "",
     "selected_program": "",
@@ -16,26 +18,30 @@ DEFAULT_VALUES = {
 }
 
 
+# Initialize session state with default values if not already set
 def initialize_session_state():
     for key, value in DEFAULT_VALUES.items():
         if key not in st.session_state:
             st.session_state[key] = value
 
 
+# Rerun the app if needed, ensuring compatibility with Snowflake
 def conditional_rerun():
-    # Use experimental_rerun only, ensuring compatibility with Snowflake
     st.rerun()
 
 
+# Initialize the page layout and title
 def initialize_page():
     view.set_page_config()
     view.display_title("Ultimate Loss Ratio Form Entry")
 
 
+# Set reset flag in session state to indicate form clearing
 def clear_form():
     st.session_state.reset_flag = True
 
 
+# Reset session state to default values and trigger rerun to refresh UI
 def reset_form():
     for key in DEFAULT_VALUES.keys():
         if key in st.session_state:
@@ -44,6 +50,7 @@ def reset_form():
     conditional_rerun()
 
 
+# Display a select box for each step in the process, customizing label and options
 def get_selection_step(step_label, options, session_key):
     options = (
         [""] + options
@@ -58,11 +65,11 @@ def get_selection_step(step_label, options, session_key):
     return selected
 
 
+# Display the dropdown for selecting a company from available options
 def get_company_selection():
     companies = model.get_distinct_company_names()
     filtered_companies = [company for company in companies if company]
-    # Add a blank option at the beginning
-    filtered_companies.insert(0, "")
+    filtered_companies.insert(0, "")  # Add a blank option at the beginning
     return st.selectbox(
         "Step 1 of 4: Select company",
         options=filtered_companies,
@@ -70,12 +77,12 @@ def get_company_selection():
     )
 
 
+# Display the dropdown for selecting a program, only if a company is selected
 def get_program_selection():
     if st.session_state.selected_company:
         programs = model.get_distinct_program_codes(st.session_state.selected_company)
         filtered_programs = [program for program in programs if program]
-        # Add a blank option at the beginning
-        filtered_programs.insert(0, "")
+        filtered_programs.insert(0, "")  # Add a blank option at the beginning
         return st.selectbox(
             "Step 2 of 4: Select Program",
             options=filtered_programs,
@@ -84,6 +91,7 @@ def get_program_selection():
     return None
 
 
+# Display a multiselect for selecting products if a program is selected
 def get_product_selection():
     if st.session_state.selected_program:
         products = model.get_distinct_product_codes(st.session_state.selected_program)
@@ -96,8 +104,8 @@ def get_product_selection():
     return None
 
 
+# Display number input for commission amount, only if multiple products are selected
 def get_commission_input():
-    # Ensure we only proceed if multiple products are selected
     if st.session_state.selected_products:
         return view.display_number_input(
             "Step 4 of 4: Enter COMMISSION_AMOUNT",
@@ -107,11 +115,13 @@ def get_commission_input():
     return None
 
 
+# Handle the form submission logic, including validation, duplicate check, and data save
 def handle_form_submission():
     if st.session_state.get("reset_flag"):
         reset_form()
 
     if view.display_form_submit_button("Save Entry", form_key="ulr_form"):
+        # Validate all required fields and commission amount
         if not (
             st.session_state.selected_company
             and st.session_state.selected_program
@@ -122,18 +132,19 @@ def handle_form_submission():
                 "Please fill all fields and provide a valid commission amount."
             )
         else:
+            # Prepare to save entries, checking for duplicates and gathering valid entries
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             new_entries = []
             duplicate_entries = []
 
-            # Loop through each product and check for duplicates
+            # Loop through each product to detect duplicates or prepare new entries
             for product in st.session_state.selected_products:
                 if model.check_existing_entry(
                     st.session_state.selected_company,
                     st.session_state.selected_program,
                     product,
                 ):
-                    duplicate_entries.append(product)  # Collect duplicates for feedback
+                    duplicate_entries.append(product)  # Collect duplicates
                 else:
                     new_entries.append(
                         {
@@ -149,7 +160,7 @@ def handle_form_submission():
                         }
                     )
 
-            # Display an error message if duplicates are found
+            # Display error message if duplicates are found
             if duplicate_entries:
                 duplicate_list = ", ".join(duplicate_entries)
                 view.display_error_message(
@@ -159,7 +170,7 @@ def handle_form_submission():
                 )
                 reset_form()  # Reset after detecting only duplicates
 
-            # Convert to DataFrame and save if there are new entries
+            # Save new entries if there are any
             if new_entries:
                 new_commision_data = pd.DataFrame(new_entries)
                 success, message = model.save_commission_data(new_commision_data)
@@ -171,11 +182,12 @@ def handle_form_submission():
                     view.display_error_message(message)
 
 
+# Display the commission data table with options for filtering and editing
 def display_commission_table(max_visible_rows=25):
     # Fetch the current ULR data from Snowflake
     commission_data = model.get_dataset("PRODUCTS.CUSTOMERS.COMMISSIONS")
 
-    # Sidebar Filtering Controls
+    # Sidebar filtering controls for various columns
     st.sidebar.header("Filter Options")
     company_filter = st.sidebar.text_input("Filter by Company Name")
     program_filter = st.sidebar.text_input("Filter by Program Code")
@@ -194,11 +206,11 @@ def display_commission_table(max_visible_rows=25):
         "Filter by Username", options=[""] + list(commission_data["USERNAME"].unique())
     )
 
-    # Date Range Slider for UPDATED_LAST column with no default value
+    # Date range slider for filtering by update date
     st.sidebar.header("Date Filter")
     date_range = st.sidebar.date_input("Filter by Updated Date", [])
 
-    # Apply filters to the data
+    # Apply filters to the data based on user input
     filtered_data = commission_data
     if company_filter:
         filtered_data = filtered_data[
@@ -229,6 +241,7 @@ def display_commission_table(max_visible_rows=25):
     if username_filter:
         filtered_data = filtered_data[filtered_data["USERNAME"] == username_filter]
 
+    # Date range filter application
     if len(date_range) == 2:
         start_date, end_date = date_range
         filtered_data = filtered_data[
@@ -236,25 +249,24 @@ def display_commission_table(max_visible_rows=25):
             & (filtered_data["UPDATED_LAST"] <= pd.to_datetime(end_date))
         ]
 
-    # Sorting Controls for Compan Name, Program Code, Product Code
+    # Sorting controls for key columns
     st.sidebar.header("Sorting Options")
     sort_column = st.sidebar.selectbox(
         "Sort by Column",
         options=[""] + ["COMPANY_NAME", "PROGRAM_CODE", "PRODUCT_CODE", "IS_ACTIVE"],
-        index=0,  # Default to an empty option, meaning no sorting applied initially
+        index=0,
     )
 
-    # Apply default sorting by UPDATED_LAST in descending order if no column is selected
+    # Default sorting by UPDATED_LAST in descending order if no column is selected
     if not sort_column:
         filtered_data = filtered_data.sort_values(by="UPDATED_LAST", ascending=False)
     else:
-        # Apply Sorting in Ascending Order if a Column is Selected
         filtered_data = filtered_data.sort_values(by=sort_column, ascending=True)
 
-    # # Display the full filtered data without pagination
+    # Define editable columns for the data editor
     editable_columns = ["COMMISSION_AMOUNT", "IS_ACTIVE"]
 
-    # Before displaying in data_editor
+    # Reset index before displaying data in editor
     filtered_data = filtered_data.reset_index(drop=True)
 
     edited_commission_data = st.data_editor(
@@ -265,22 +277,20 @@ def display_commission_table(max_visible_rows=25):
         disabled=filtered_data.columns.difference(editable_columns),
     )
 
-    # Check if rows were deleted by comparing the indexes
+    # Check for deleted rows based on index changes
     original_index_set = set(filtered_data.index)
     edited_index_set = set(edited_commission_data.index)
     deleted_indexes = original_index_set - edited_index_set
 
-    # Check if there are any changes to the editable columns or rows have been deleted
+    # Detect and handle any changes in editable columns or row deletions
     if not edited_commission_data.equals(filtered_data) or deleted_indexes:
         st.write("Changes detected. Click 'Apply Changes' to save.")
 
         if st.button("Apply Changes"):
             try:
-                # Handle Deletions
+                # Handle deletions based on deleted row indexes
                 for delete_index in deleted_indexes:
                     row_to_delete = filtered_data.loc[delete_index]
-                    # Use the primary keys (COMPANY_NAME, PROGRAM_CODE, PRODUCT_CODE)
-                    # to identify the record to delete
                     success, message = model.delete_commission_data(
                         company_name=row_to_delete["COMPANY_NAME"],
                         program_code=row_to_delete["PROGRAM_CODE"],
@@ -294,14 +304,12 @@ def display_commission_table(max_visible_rows=25):
                     else:
                         st.error(f"Failed to delete row: {message}")
 
-                # Handle Updates
+                # Handle updates based on changes in editable columns
                 changed_rows = edited_commission_data[
                     edited_commission_data.ne(filtered_data).any(axis=1)
                 ]
                 for index, row in changed_rows.iterrows():
                     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    # Use the primary keys (COMPANY_NAME, PROGRAM_CODE, PRODUCT_CODE)
-                    # to identify the record to update
                     success, message = model.update_ulr_data(
                         company_name=row["COMPANY_NAME"],
                         program_code=row["PROGRAM_CODE"],
