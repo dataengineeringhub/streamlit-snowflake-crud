@@ -15,4 +15,5 @@ create or replace streamlit finance_ulr_form
     root_location = '@DE_STREAMLIT_DEV.finance.stg_streamlit_finance_ulr'
     main_file = '/app.py'
     query_warehouse = 'WH_STREAMLIT_DEV';
+    
 show streamlits;
